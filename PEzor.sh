@@ -41,6 +41,7 @@ OUTPUT_EXTENSION=exe
 CLEANUP=false
 SOURCES=""
 FLUCTUATE=false
+CUSTOMENC=false
 
 usage() {
     echo 'Usage PE:        ./PEzor.sh [-32|-64] [-debug] [-syscalls] [-unhook] [-sleep=<SECONDS>] [-sgn] [-antidebug] [-text] [-self] [-rx] [-format=<FORMAT>] <executable.exe> [donut args]'
@@ -119,10 +120,11 @@ OPTIONS
   -rx                       Allocate RX memory for shellcode
   -self                     Execute the shellcode in the same thread [requires RX shellcode, not compatible with -sgn]
   -cleanup                  Perform the cleanup of allocated payload and loaded modules (only for BOFs)
+  -customenc				Custom shellcode encryption
   -sleep=N                  Sleeps for N seconds before unpacking the shellcode
   -format=FORMAT            Outputs result in specified FORMAT (exe, dll, reflective-dll, service-exe, service-dll, dotnet, dotnet-createsection, dotnet-pinvoke)
   -fluctuate=PROTECTION     Fluctuate memory region to PROTECTION (RW or NA) by hooking Sleep()
-
+  
 EXAMPLES
   # 64-bit (self-inject RWX)
   $ PEzor.sh shellcode.bin
@@ -232,6 +234,10 @@ do
             echo "[*] Warning: -rx supports RX shellcode only"
             RX=true
             ;;
+        -customenc)
+            CUSTOMENC=true
+            echo '[?] Final shellcode xor encrypted'
+            ;;
         -format=*)
             OUTPUT_FORMAT="${arg#*=}"
             echo "[?] Output format: $OUTPUT_FORMAT"
@@ -264,6 +270,11 @@ fi
 
 if [ $BITS -eq 32 ] && [ $SYSCALLS = true ]; then
     echo '[x] Error: cannot inline syscalls with 32bits applications'
+    exit 1
+fi
+
+if [ $SGN = true ] && [ $CUSTOMENC = true ]; then
+    echo '[x] Error: cannot use both sgn and custom encryption at same time'
     exit 1
 fi
 
@@ -347,7 +358,7 @@ case $OUTPUT_FORMAT in
         else
             if [ $IS_SHELLCODE = false ]; then
                 echo '[?] Executing donut' &&
-                (donut -i $BLOB -o $TMP_DIR/shellcode.bin.donut "$@" || exit 1)
+                (donut -i $BLOB -o $TMP_DIR/shellcode.bin.donut "$@" || exit 1) 
             else
                 cp $BLOB $TMP_DIR/shellcode.bin.donut
             fi
@@ -355,6 +366,9 @@ case $OUTPUT_FORMAT in
             if [ $SGN = true ]; then
                 echo '[?] Executing sgn' &&
                 (sgn -a $BITS -c 1 -o $TMP_DIR/shellcode.bin $TMP_DIR/shellcode.bin.donut || exit 1)
+            elif [ $CUSTOMENC = true ]; then
+            	echo '[?] Running enc.py' &&
+            	(python3 $INSTALL_DIR/enc.py $BLOB $TMP_DIR/shellcode || exit 1)
             else
                 cp $TMP_DIR/shellcode.bin.donut $TMP_DIR/shellcode.bin
             fi
@@ -364,7 +378,11 @@ case $OUTPUT_FORMAT in
             echo -n 'unsigned char buf[] = "' >> $TMP_DIR/shellcode.cpp &&
             od -vtx1 $TMP_DIR/shellcode.bin | sed -e 's/^[0-9]* //' -e '$d' -e 's/^/ /' -e 's/ /\\x/g' | tr -d '\n' >> $TMP_DIR/shellcode.cpp &&
             echo '";' >> $TMP_DIR/shellcode.cpp &&
-            echo 'unsigned int buf_size = sizeof(buf);' >> $TMP_DIR/shellcode.cpp || exit 1
+            echo 'unsigned int buf_size = sizeof(buf);' >> $TMP_DIR/shellcode.cpp &&
+            if [ $CUSTOMENC = true ]; then echo -n 'unsigned char key[] = "' >> $TMP_DIR/shellcode.cpp &&
+            od -vtx1 $TMP_DIR/shellcode.key | sed -e 's/^[0-9]* //' -e '$d' -e 's/^/ /' -e 's/ /\\x/g' | tr -d '\n' >> $TMP_DIR/shellcode.cpp &&
+            echo '";' >> $TMP_DIR/shellcode.cpp &&
+            echo 'unsigned int key_size = sizeof(key);' >> $TMP_DIR/shellcode.cpp; fi || exit 1
         fi
 
         if [[ ( $OUTPUT_FORMAT = "exe" || $OUTPUT_FORMAT = "service-exe" ) && $DEBUG = false ]]; then
@@ -416,7 +434,12 @@ case $OUTPUT_FORMAT in
             CCFLAGS="$CCFLAGS -DRX"
             CPPFLAGS="$CPPFLAGS -DRX"
         fi
-
+	
+		if [ $CUSTOMENC = true ]; then
+			CCFLAGS="$CCFLAGS -DCUSTOMENC"
+			CPPFLAGS="$CPPFLAGS -DCUSTOMENC"
+		fi
+		
         if [ $TEXT = true ]; then
             CCFLAGS="$CCFLAGS -D_TEXT_"
             CPPFLAGS="$CPPFLAGS -D_TEXT_"
@@ -556,5 +579,5 @@ case $OUTPUT_FORMAT in
         ;;
 esac
 
-rm -rf $TMP_DIR &&
+#rm -rf $TMP_DIR &&
 echo -n '[!] Done! Check '; file $BLOB.packed.$OUTPUT_EXTENSION

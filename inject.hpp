@@ -16,6 +16,10 @@
 #endif
 
 void my_init_syscalls_list(void);
+#if CUSTOMENC
+LPVOID inject_shellcode_self(unsigned char shellcode[], SIZE_T size, unsigned char key[], SIZE_T key_size, PHANDLE phThread, BOOL wait, unsigned int sleep_time);
+#else
 LPVOID inject_shellcode_self(unsigned char shellcode[], SIZE_T size, PHANDLE phThread, BOOL wait, unsigned int sleep_time);
+#endif
 
 #endif

